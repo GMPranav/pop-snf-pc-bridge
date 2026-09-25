@@ -168,6 +168,18 @@ For a full directory index and maintenance instructions (including how to regene
 ---
 
 ## Credits & License
-- **Prince of Persia: The Shadow and the Flame** © Ubisoft Entertainment.
-- **Dynarmic**: Fast ARMv7 dynamic recompiler by merryhime and contributors.
-- **pop2-vita**: PS Vita wrapper reference by usineur.
+
+This project's source code and custom tooling are licensed under the **GNU General Public License v3.0** (GPL-3.0). See [LICENSE](LICENSE) for the full license text.
+
+### Legal Notice & Non-Affiliation Disclaimer
+- **Prince of Persia** and **Prince of Persia: The Shadow and the Flame** are registered trademarks of Ubisoft Entertainment and Jordan Mechner.
+- This project is an unofficial, non-commercial open-source fan preservation and compatibility layer created for educational, research, and archival purposes. It is not affiliated with, endorsed by, sponsored by, or supported by Ubisoft Entertainment or Jordan Mechner.
+- **No copyrighted game assets** (models, textures, audio, level data, or proprietary game binaries) are distributed in this repository. Users must supply their own legally acquired copy of the game.
+
+### Acknowledgments & Dependencies
+- **Dynarmic**: Fast ARMv7 dynamic recompiler by merryhime and contributors (0BSD).
+- **Dear ImGui**: Immediate-mode GUI library by Omar Cornut and contributors (MIT).
+- **SDL2**: Cross-platform window, audio, and input handling (zlib).
+- **OpenAL Soft**: 3D spatial software audio synthesizer (LGPL v2+).
+- **miniz & LZMA**: High-performance zip and lzma decompression libraries.
+- **pop2-vita**: PS Vita wrapper reference and research by usineur.
