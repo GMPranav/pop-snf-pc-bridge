@@ -1,0 +1,31 @@
+# === Deny-list: everything is tracked by default; only the paths below are ignored ===
+
+# Generated CMake build directories
+/build/
+/build_app/
+/build_dynarmic/
+
+# Portable toolchains - large binaries, fetched by setup script, never committed
+/tools/
+
+# Copyrighted game runtime + assets - never committed
+/game/
+/game_new/
+
+# Copyrighted original platform dumps (APK/IPA/SMF/STK extracts) - never committed
+/ref_assets/
+
+# Generated test/diagnostic output
+/screenshots/
+*.log
+*.xkv
+
+# Build artifacts that can end up in src/ or third_party/ from local builds
+*.o
+*.obj
+__pycache__/
+*.pyc
+
+# scratch/: keep your own analysis scripts, exclude everything derived from
+# the copyrighted game (extracted textures, decrypted scripts) and build output
+/scratch/
