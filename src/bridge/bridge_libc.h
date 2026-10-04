@@ -71,6 +71,11 @@ void bridge_libc_dump_missing_assets(void);
  * also logged immediately as a `[SCENE]` transition line. */
 void bridge_libc_set_scene_context(uint32_t scene_ptr, uint32_t game_ptr, uint32_t ce_state, uint32_t frame_no);
 
+/* Request game termination: sets exit requested flag and code */
+void bridge_request_exit(int exit_code);
+int bridge_is_exit_requested(void);
+int bridge_get_exit_code(void);
+
 #ifdef __cplusplus
 }
 #endif

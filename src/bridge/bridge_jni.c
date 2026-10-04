@@ -506,6 +506,12 @@ static uint32_t wrap_jni_CallVoidMethodV(elf32_image_t *img, uint32_t r0, uint32
             fprintf(stderr, "[TRANSLATOR CALL] JNI CallVoidMethodV(mid=%u '%s')\n", r2, mname);
         }
     }
+    if (strcmp(mname, "finish") == 0 || strcmp(mname, "finishActivity") == 0) {
+        if (s_jni_debug_mode) {
+            fprintf(stderr, "[JNI] Activity.%s() called! Requesting clean exit...\n", mname);
+        }
+        bridge_request_exit(0);
+    }
     return 0;
 }
 
@@ -637,6 +643,12 @@ static uint32_t wrap_jni_CallStaticVoidMethodV(elf32_image_t *img, uint32_t r0, 
         if (r2 < MAX_METHOD_IDS && s_logged[r2]++ < 5) {
             fprintf(stderr, "[TRANSLATOR CALL] JNI CallStaticVoidMethodV(mid=%u '%s')\n", r2, mname);
         }
+    }
+    if (strcmp(mname, "exit") == 0) {
+        if (s_jni_debug_mode) {
+            fprintf(stderr, "[JNI] System.%s() called! Requesting clean exit...\n", mname);
+        }
+        bridge_request_exit(0);
     }
     return 0;
 }

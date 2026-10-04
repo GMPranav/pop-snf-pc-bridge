@@ -52,15 +52,24 @@ static void ensure_compatibility_flags(void) {
         if (RegCreateKeyExA(HKEY_CURRENT_USER,
                             "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers",
                             0, NULL, 0, KEY_SET_VALUE | KEY_QUERY_VALUE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-            char current_val[256] = {0};
+            char current_val[512] = {0};
             DWORD val_size = sizeof(current_val);
             DWORD type = 0;
             LONG res = RegQueryValueExA(hKey, exe_path, NULL, &type, (LPBYTE)current_val, &val_size);
-            const char *val = "~ DISABLEDXMAXIMIZEDWINDOWEDMODE";
             if (res != ERROR_SUCCESS || strstr(current_val, "DISABLEDXMAXIMIZEDWINDOWEDMODE") == NULL) {
-                RegSetValueExA(hKey, exe_path, 0, REG_SZ, (const BYTE*)val, (DWORD)strlen(val) + 1);
+                char new_val[512] = {0};
+                if (res == ERROR_SUCCESS && current_val[0] != '\0') {
+                    /* Append our flag to whatever is already there.
+                     * AppCompatFlags/Layers is a space-separated list of tokens. */
+                    snprintf(new_val, sizeof(new_val), "%s DISABLEDXMAXIMIZEDWINDOWEDMODE", current_val);
+                } else {
+                    /* No existing entry — write a fresh value with the ~ prefix
+                     * (applies to all user accounts in the compatibility shim). */
+                    snprintf(new_val, sizeof(new_val), "~ DISABLEDXMAXIMIZEDWINDOWEDMODE");
+                }
+                RegSetValueExA(hKey, exe_path, 0, REG_SZ, (const BYTE*)new_val, (DWORD)strlen(new_val) + 1);
                 if (g_debug_mode) {
-                    printf("[+] Applied DWM windowed composition compatibility flag (~ DISABLEDXMAXIMIZEDWINDOWEDMODE)\n");
+                    printf("[+] Applied DWM windowed composition compatibility flag: \"%s\"\n", new_val);
                 }
             }
             s_dwm_composition_enforced = true;
@@ -294,7 +303,7 @@ struct FrameTimings {
     int64_t engine_us;
     int64_t swap_us;
     int64_t sleep_us;
-    int64_t heap_delta_kb;  /* guest heap bytes allocated this frame / 1024 */
+    int64_t heap_delta_allocs;  /* net allocation count (mallocs - frees) this frame */
 };
 
 static FrameTimings  s_perf_window[PERF_WINDOW];
@@ -344,14 +353,12 @@ static void perf_frame_end(int frame_no,
 
     uint64_t mallocs_this_frame = bridge_libc_get_malloc_count() - s_perf_malloc_prev;
     uint64_t frees_this_frame   = bridge_libc_get_free_count()   - s_perf_free_prev;
-    /* Net allocation count this frame. Use count not byte-estimate to avoid overflow.
-     * Report in "net alloc KB" using a safe 64-bit calculation capped to avoid overflow.
-     * Since we can't get per-frame bytes easily, track net allocs (positive = more allocs than frees). */
+    /* Net allocation count this frame (positive = more mallocs than frees).
+     * Stored as a count, not bytes — we cannot cheaply measure per-frame byte deltas. */
     int64_t net_allocs = (int64_t)mallocs_this_frame - (int64_t)frees_this_frame;
-    int64_t heap_delta_kb = net_allocs;  /* count of net allocations this frame */
+    int64_t heap_delta_allocs = net_allocs;
 
-
-    FrameTimings ft = { total_us, engine_us, swap_us, sleep_us, heap_delta_kb };
+    FrameTimings ft = { total_us, engine_us, swap_us, sleep_us, heap_delta_allocs };
     s_perf_window[s_perf_head] = ft;
     s_perf_head = (s_perf_head + 1) % PERF_WINDOW;
     if (s_perf_filled < PERF_WINDOW) s_perf_filled++;
@@ -362,25 +369,25 @@ static void perf_frame_end(int frame_no,
     if (total_us >= jitter_thresh) {
         s_frame_jitter_total++;
         printf("[JITTER f=%d] total=%.2fms  engine=%.2fms  swap=%.2fms  sleep=%.2fms"
-               "  heap_delta=%+ldKB%s\n",
+               "  heap_delta=%+ld allocs%s\n",
                frame_no,
                total_us  / 1000.0,
                engine_us / 1000.0,
                swap_us   / 1000.0,
                sleep_us  / 1000.0,
-               (long)heap_delta_kb,
-               (heap_delta_kb > 512) ? "  <-- asset load spike?" : "");
+               (long)heap_delta_allocs,
+               (heap_delta_allocs > 512) ? "  <-- asset load spike?" : "");
         if (s_perf_log) {
             fprintf(s_perf_log,
                     "[JITTER f=%d] total=%.2fms  engine=%.2fms  swap=%.2fms  sleep=%.2fms"
-                    "  heap_delta=%+ldKB%s\n",
+                    "  heap_delta=%+ld allocs%s\n",
                     frame_no,
                     total_us  / 1000.0,
                     engine_us / 1000.0,
                     swap_us   / 1000.0,
                     sleep_us  / 1000.0,
-                    (long)heap_delta_kb,
-                    (heap_delta_kb > 512) ? "  <-- asset load spike?" : "");
+                    (long)heap_delta_allocs,
+                    (heap_delta_allocs > 512) ? "  <-- asset load spike?" : "");
             fflush(s_perf_log);
         }
     }
@@ -410,7 +417,7 @@ static void perf_frame_end(int frame_no,
             sum_eng    += s_perf_window[i].engine_us;
             sum_swap   += s_perf_window[i].swap_us;
             sum_slp    += s_perf_window[i].sleep_us;
-            sum_hdelta += s_perf_window[i].heap_delta_kb;
+            sum_hdelta += s_perf_window[i].heap_delta_allocs;
         }
         double avg_ms  = (sum_total  / (double)n) / 1000.0;
         double eng_ms  = (sum_eng    / (double)n) / 1000.0;
@@ -421,7 +428,7 @@ static void perf_frame_end(int frame_no,
 
         const char *line_fmt =
             "[PERF f=%d] fps=%.1f  avg=%.2fms  p50=%.2f  p95=%.2f  p99=%.2f  max=%.2f"
-            "  engine=%.2fms  swap=%.2fms  sleep=%.2fms  jitter=%lld  heap_delta=%+ldKB/f\n";
+            "  engine=%.2fms  swap=%.2fms  sleep=%.2fms  jitter=%lld  heap_delta=%+ld allocs/f\n";
 
         printf(line_fmt, frame_no, fps, avg_ms,
                p50/1000.0, p95/1000.0, p99/1000.0, tmax/1000.0,
@@ -526,6 +533,15 @@ static void reset_ai_temporary_handles(dynarmic_host_t *host, elf32_image_t *img
             dynarmic_call(host, s_sym_aistack_clearTempHandles, s_cached_ai_stack, 0, 0, 0);
         }
     }
+}
+
+/* Safely reinterpret a float's bit-pattern as a uint32_t.
+ * Using *(uint32_t*)&f is undefined behavior in C++ (strict aliasing violation).
+ * memcpy is guaranteed to produce the correct bit-pattern on any conforming compiler. */
+static inline uint32_t float_bits(float f) {
+    uint32_t bits;
+    memcpy(&bits, &f, sizeof(bits));
+    return bits;
 }
 
 static void send_key(dynarmic_host_t *host, int android_code, int is_down) {
@@ -645,7 +661,9 @@ static void setup_dual_logging() {
     if (!s_log_file) s_log_file = fopen("game/pop_pc.log", "wb");
 
     time_t now = time(NULL);
-    struct tm *t = localtime(&now);
+    struct tm tm_buf;
+    memset(&tm_buf, 0, sizeof(tm_buf));
+    struct tm *t = (localtime_s(&tm_buf, &now) == 0) ? &tm_buf : NULL;
     char archive_path[256];
     if (t) {
         snprintf(archive_path, sizeof(archive_path), "logs/pop_pc_%04d%02d%02d_%02d%02d%02d.log",
@@ -673,6 +691,9 @@ static void setup_dual_logging() {
         if (write_fd >= 0) {
             _dup2(write_fd, _fileno(stdout));
             _dup2(write_fd, _fileno(stderr));
+            /* write_fd is now redundant — stdout/stderr own the underlying handle.
+             * Close it to avoid leaking a file descriptor. */
+            _close(write_fd);
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
 
@@ -680,6 +701,7 @@ static void setup_dual_logging() {
             if (th) CloseHandle((HANDLE)th);
         }
     }
+
 }
 #endif
 
@@ -703,13 +725,17 @@ int main(int argc, char *argv[]) {
             freopen("CONOUT$", "w", stderr);
         }
         setup_dual_logging();
-        perf_init();
     }
     /* Enable 1ms Windows timer resolution so SDL_Delay/Sleep() wakes
      * within ~1ms instead of the default 15.6ms. This is the primary
      * cause of frame-time jitter when software-capping at 60fps.
      * Balanced by timeEndPeriod(1) at shutdown. */
     timeBeginPeriod(1);
+    /* Always initialize the QPC frequency regardless of build mode.
+     * perf_now_us() divides by s_perf_qpf — if it stays at its default
+     * value of 1, every timing value is ~10,000,000x too large and the
+     * software FPS limiter never fires in release builds. */
+    perf_init();
 #endif
     setvbuf(stdout, NULL, _IONBF, 0);
     // Lock working directory strictly to the executable's own directory
@@ -781,7 +807,15 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--action") == 0 && i + 1 < argc) {
             const char *aname = argv[++i];
             if (max_frames < 320) max_frames = 320;
-            if (strcmp(aname, "back") == 0) {
+            if (strcmp(aname, "quit") == 0) {
+                key_action_name = "key_back";
+                key_action_frame = 200;
+                key_action_code = AKEYCODE_BACK;
+                click3_name = "quit_yes";
+                click3_frame = 225;
+                click3_x = 820.0f; click3_y = 355.0f;
+                if (max_frames == 0) max_frames = 280;
+            } else if (strcmp(aname, "back") == 0) {
                 click3_name = "back";
                 click3_frame = 200;
                 click3_x = 55.0f; click3_y = 45.0f;
@@ -970,13 +1004,47 @@ int main(int argc, char *argv[]) {
 
     bool is_igpu = is_active_gpu_integrated(s_gl_vendor, s_gl_renderer);
 
-    // On Intel integrated GPUs under Windows DWM, driver wglSwapIntervalEXT(1) suffers from
-    // a double-buffering queue stall in SwapBuffers that drops framerate to 30 FPS.
-    // By setting driver swap interval to 0 on iGPU, SwapBuffers returns non-blocking in ~0.5ms.
-    // Windows DWM composition (enforced via DISABLEDXMAXIMIZEDWINDOWEDMODE) guarantees tear-free
-    // scanout, and our sub-millisecond hybrid sleep limiter paces the frames to a rock-solid 60.0 FPS.
-    // On discrete GPUs, driver swap interval 1 is requested to synchronize presentation.
-    int swap_interval = (is_igpu) ? 0 : (g_config.vsync ? 1 : 0);
+#ifdef _WIN32
+    ensure_dwm_init();
+    const SystemGpuTopology &topo = get_system_gpu_topology();
+
+    // On Optimus/Enduro hybrid laptops the user may have forced the discrete GPU via
+    // GPUPreference=2 in config.ini (takes effect on the NEXT launch because the
+    // NvOptimusEnablement/AmdPowerXpressRequestHighPerformance exports on this binary
+    // already instructed the driver to use the iGPU for this launch).
+    // If the registry preference took effect and the active context is on the dGPU,
+    // driver VSync via wglSwapIntervalEXT(1) is unreliable on Optimus: the dGPU
+    // renders but must copy frames over PCIe to the iGPU for display; VSync can
+    // stall at 30 FPS (double-buffer queue stall) or not block at all (tearing).
+    // Fall back to swap_interval=0 + DWM + software hybrid-sleep limiter instead.
+    bool is_optimus_dgpu = topo.is_hybrid_system && !is_igpu;
+    if (is_optimus_dgpu) {
+        printf("[!] Optimus/hybrid dGPU active: driver VSync unreliable over PCIe cross-adapter "
+               "path. Using software frame limiter + DWM composition for tear-free output.\n");
+    }
+    // Warn about one-launch delay: GPUPreference=2 is set, but NvOptimusEnablement=0
+    // on this binary told the driver to use the iGPU for *this* launch. The registry
+    // key written by apply_windows_gpu_preference() takes effect on the next launch.
+    if (topo.is_hybrid_system && is_igpu && g_config.gpu_preference == 2) {
+        printf("[!] GPUPreference=2 (High Performance GPU) set but takes effect on the NEXT launch. "
+               "Running on integrated GPU this session.\n");
+    }
+#else
+    bool is_optimus_dgpu = false;
+#endif
+
+    // Frame pacing strategy:
+    //   iGPU:         swap=0 — wglSwapIntervalEXT(1) causes a 30fps stall under DWM;
+    //                 DWM composition + software hybrid-sleep limiter gives tear-free 60fps.
+    //   Optimus dGPU: same as iGPU — driver VSync unreliable over PCIe cross-adapter path.
+    //   Desktop dGPU: swap=vsync ? 1 : 0 — driver VSync works correctly on a single GPU
+    //                 directly wired to the display.
+    int swap_interval;
+    if (is_igpu || is_optimus_dgpu) {
+        swap_interval = 0;
+    } else {
+        swap_interval = (g_config.vsync ? 1 : 0);
+    }
     int vsync_res = SDL_GL_SetSwapInterval(swap_interval);
     if (vsync_res < 0) {
         fprintf(stderr, "[-] Warning: SDL_GL_SetSwapInterval(%d) failed: %s\n", swap_interval, SDL_GetError());
@@ -997,16 +1065,18 @@ int main(int argc, char *argv[]) {
     }
 
 #ifdef _WIN32
-    ensure_dwm_init();
-    const SystemGpuTopology &topo = get_system_gpu_topology();
-    const char *scanout_status = "Display-Attached GPU (Direct Hardware Scanout / Tear-Free)";
-    if (topo.is_hybrid_system && !is_igpu && swap_ctrl <= 0) {
-        scanout_status = "Optimus Cross-Adapter dGPU (PCIe Asynchronous Copy / Tearing Risk on Laptop Screen)";
-    } else if (is_igpu) {
-        scanout_status = "Display-Attached Integrated GPU (Direct Hardware Scanout / Tear-Free VSync)";
-    }
-    if (g_debug_mode) {
-        printf("[+] Display Topology: %s\n", scanout_status);
+    {
+        const char *scanout_status;
+        if (is_optimus_dgpu) {
+            scanout_status = "Optimus Cross-Adapter dGPU (Software Frame Limiter / DWM Tear-Free)";
+        } else if (is_igpu) {
+            scanout_status = "Display-Attached Integrated GPU (Direct Hardware Scanout / Tear-Free VSync)";
+        } else {
+            scanout_status = "Display-Attached Discrete GPU (Direct Hardware Scanout / Driver VSync)";
+        }
+        if (g_debug_mode) {
+            printf("[+] Display Topology: %s\n", scanout_status);
+        }
     }
 #endif
 
@@ -1365,6 +1435,14 @@ int main(int argc, char *argv[]) {
     std::vector<PendingWheelPulse> pending_wheel_pulses;
 
     while (running) {
+        if (bridge_is_exit_requested()) {
+            if (g_debug_mode) {
+                printf("[+] Bridge exit requested (code=%d). Terminating main loop...\n", bridge_get_exit_code());
+            }
+            running = false;
+            break;
+        }
+
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 case SDL_QUIT:
@@ -1570,7 +1648,7 @@ int main(int argc, char *argv[]) {
                     if (s_sym_S3DClient_iPhone_OnMouseMoved) {
                         float nx = (2.0f * mx / (float)g_render_width) - 1.0f;
                         float ny = (2.0f * (float)(g_render_height - my) / (float)g_render_height) - 1.0f;
-                        dynarmic_call(host, s_sym_S3DClient_iPhone_OnMouseMoved, *(uint32_t*)&nx, *(uint32_t*)&ny, 0, 0);
+                        dynarmic_call(host, s_sym_S3DClient_iPhone_OnMouseMoved, float_bits(nx), float_bits(ny), 0, 0);
                     }
                     break;
                 }
@@ -1614,11 +1692,11 @@ int main(int argc, char *argv[]) {
                         }
                         if (down) {
                             if (s_sym_engineOnMouseButtonDown)
-                                dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                                dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                             send_touch(host, img, mx, my, TOUCH_PHASE_DOWN);
                         } else {
                             if (s_sym_engineOnMouseButtonUp)
-                                dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                                dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                             send_touch(host, img, mx, my, TOUCH_PHASE_UP);
                         }
                     }
@@ -1690,10 +1768,10 @@ int main(int argc, char *argv[]) {
                 float mx = 640.0f;
                 float my = 650.0f;
                 if (s_sym_engineOnMouseButtonDown) {
-                    dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                    dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
                 if (s_sym_engineOnMouseButtonUp) {
-                    dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                    dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
                 send_key(host, AKEYCODE_BUTTON_A, 1);
                 send_key(host, AKEYCODE_BUTTON_A, 0);
@@ -1704,10 +1782,10 @@ int main(int argc, char *argv[]) {
                 float mx = click2_x;
                 float my = click2_y;
                 if (s_sym_engineOnMouseMove) {
-                    dynarmic_call(host, s_sym_engineOnMouseMove, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                    dynarmic_call(host, s_sym_engineOnMouseMove, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
                 if (s_sym_engineOnMouseButtonDown) {
-                    dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                    dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
                 if (s_sym_sendEventToCurrentUser) {
                     if (strcmp(click2_name, "world_map") == 0) {
@@ -1726,7 +1804,7 @@ int main(int argc, char *argv[]) {
                 float mx = click2_x;
                 float my = click2_y;
                 if (s_sym_engineOnMouseButtonUp) {
-                    dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                    dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
             }
 
@@ -1735,10 +1813,13 @@ int main(int argc, char *argv[]) {
                 float mx = click3_x;
                 float my = click3_y;
                 if (s_sym_engineOnMouseMove) {
-                    dynarmic_call(host, s_sym_engineOnMouseMove, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                    dynarmic_call(host, s_sym_engineOnMouseMove, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
                 if (s_sym_engineOnMouseButtonDown) {
-                    dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                    dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
+                }
+                if (s_sym_sendEventToCurrentUser && strcmp(click3_name, "quit_yes") == 0) {
+                    send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onExitConfirmYes");
                 }
             }
             if (click3_frame > 0 && s_frame_cnt == click3_frame + 2) {
@@ -1746,7 +1827,7 @@ int main(int argc, char *argv[]) {
                 float mx = click3_x;
                 float my = click3_y;
                 if (s_sym_engineOnMouseButtonUp) {
-                    dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, *(uint32_t*)&mx, *(uint32_t*)&my);
+                    dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
             }
 
@@ -2041,8 +2122,13 @@ int main(int argc, char *argv[]) {
                 send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onMainMenu");
             }
 
-            // If game is in state 5 and game is not running, kickstart it!
-            if (ce_state == 5 && game_ptr && game_run == 0) {
+            static bool s_game_did_run = false;
+            if (game_run == 1) {
+                s_game_did_run = true;
+            }
+
+            // If game is in state 5 and game has not started yet, kickstart it!
+            if (!s_game_did_run && ce_state == 5 && game_ptr && game_run == 0 && s_frame_cnt <= 30) {
                 if (g_debug_mode) printf("[!] State 5 active but game_run==0! Kickstarting Game::Run()...\n");
                 uint32_t sym_game_run = elf32_lookup_symbol(img, "_ZN7Pandora10EngineCore4Game3RunEv");
                 if (sym_game_run) {
@@ -2052,6 +2138,16 @@ int main(int argc, char *argv[]) {
                     *(uint8_t*)(img->mem + game_ptr + 0x11) = 0;
                 }
                 *(uint8_t*)(img->mem + ce_ptr + 0x69) = 0;
+            }
+
+            // If game was running and has now stopped or requested stop, exit cleanly
+            if (s_game_did_run && (game_run == 0 || ce_p68 != 0 || ce_p69 != 0)) {
+                if (g_debug_mode) {
+                    printf("[+] In-game quit detected (game_run=%u, ce_p68=%u, ce_p69=%u). Terminating cleanly...\n",
+                           game_run, ce_p68, ce_p69);
+                }
+                running = false;
+                break;
             }
 
             if (!ret && g_debug_mode) {

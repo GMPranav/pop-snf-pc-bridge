@@ -106,9 +106,21 @@ bool is_active_gpu_integrated(const char *gl_vendor, const char *gl_renderer) {
         }
     }
 
-    // Generic heuristic for integrated graphics (Intel HD/UHD/Iris, AMD APU Radeon(TM) Graphics)
-    if (gl_vendor && strstr(gl_vendor, "Intel")) return true;
-    if (gl_renderer && (strstr(gl_renderer, "Intel") || strstr(gl_renderer, "Iris") || strstr(gl_renderer, "HD Graphics") || strstr(gl_renderer, "UHD Graphics"))) return true;
+    // Generic heuristic for integrated graphics (Intel HD/UHD/Iris, AMD APU Radeon(TM) Graphics).
+    // Exclude Intel Arc (Alchemist/Battlemage) and Intel DG1 — these are genuine discrete cards
+    // that report an Intel vendor string but are not display-attached integrated GPUs.
+    bool is_intel_vendor   = (gl_vendor   && strstr(gl_vendor,   "Intel") != NULL);
+    bool is_intel_renderer = (gl_renderer && (strstr(gl_renderer, "Intel")       != NULL ||
+                                              strstr(gl_renderer, "Iris")        != NULL ||
+                                              strstr(gl_renderer, "HD Graphics") != NULL ||
+                                              strstr(gl_renderer, "UHD Graphics")!= NULL));
+    // Intel Arc and DG1 renderer strings — treat as discrete, not integrated
+    bool is_intel_discrete = (gl_renderer && (strstr(gl_renderer, "Arc")       != NULL ||
+                                              strstr(gl_renderer, "DG1")       != NULL ||
+                                              strstr(gl_renderer, "Alchemist") != NULL ||
+                                              strstr(gl_renderer, "Xe-HPG")    != NULL ||
+                                              strstr(gl_renderer, "Xe-HPC")    != NULL));
+    if ((is_intel_vendor || is_intel_renderer) && !is_intel_discrete) return true;
     if (gl_renderer && strstr(gl_renderer, "Radeon(TM) Graphics")) return true;
 
     return false;

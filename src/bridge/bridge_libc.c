@@ -2906,8 +2906,25 @@ static uint32_t wrap_uname(elf32_image_t *img, uint32_t r0, uint32_t r1, uint32_
     return 0;
 }
 
+static volatile int g_exit_requested = 0;
+static int g_exit_code = 0;
+
+void bridge_request_exit(int exit_code) {
+    g_exit_requested = 1;
+    g_exit_code = exit_code;
+}
+
+int bridge_is_exit_requested(void) {
+    return g_exit_requested;
+}
+
+int bridge_get_exit_code(void) {
+    return g_exit_code;
+}
+
 static uint32_t wrap_abort(elf32_image_t *img, uint32_t r0, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t sp) {
     fprintf(stderr, "[-] Guest called abort()! lr=0x%08X pc=0x%08X sp=0x%08X\n", g_guest_lr, g_guest_pc, sp);
+    bridge_request_exit(1);
     return 0;
 }
 
@@ -2917,7 +2934,10 @@ static uint32_t wrap_stack_chk_fail(elf32_image_t *img, uint32_t r0, uint32_t r1
 }
 
 static uint32_t wrap_exit(elf32_image_t *img, uint32_t r0, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t sp) {
-    fprintf(stderr, "[-] Guest called exit(%d)! sp=0x%08X\n", r0, sp);
+    if (s_libc_debug_mode) {
+        fprintf(stderr, "[-] Guest called exit(%d)! sp=0x%08X\n", r0, sp);
+    }
+    bridge_request_exit((int)r0);
     return 0;
 }
 
