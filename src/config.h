@@ -38,6 +38,9 @@ struct GameConfig {
     int anisotropic = 16;       // 1 (off), 2, 4, 8, 16
     int gpu_preference = -1;    // -1 (Auto-detect from hardware), 0 (System Default), 1 (Integrated/Power Saving), 2 (Discrete/High Performance)
 
+    // Soft-Mods / Visual Enhancements
+    bool mod_clean_main_menu = true; // Clean Main Menu: remove "Get More Coins" & "Get More Games" buttons
+
     // Keyboard Primary Controls (SDL_Scancode)
     int key_up = SDL_SCANCODE_W;        // WASD: Movement / Menu Navigation
     int key_down = SDL_SCANCODE_S;

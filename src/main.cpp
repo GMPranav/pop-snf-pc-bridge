@@ -137,6 +137,7 @@ static void ensure_dwm_init(void) {
 #include "build_version.h"
 #include "config.h"
 #include "gpu_detect.h"
+#include "mods/soft_mods.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../third_party/stb/stb_image.h"
@@ -934,6 +935,9 @@ int main(int argc, char *argv[]) {
     }
 
     g_config.load("config.ini");
+    soft_mods_config_t sm_cfg = {};
+    sm_cfg.clean_main_menu = g_config.mod_clean_main_menu;
+    soft_mods_init(&sm_cfg);
 #ifdef _WIN32
     ensure_compatibility_flags();
     apply_windows_gpu_preference(g_config.gpu_preference);
@@ -2005,6 +2009,10 @@ int main(int argc, char *argv[]) {
             // FIRST seen in, and scene transitions get their own [SCENE]
             // log line the moment they happen.
             bridge_libc_set_scene_context(p0_scene, game_ptr, ce_state, (uint32_t)s_frame_cnt);
+
+            if (p0_hud) {
+                soft_mods_apply_hud(img, p0_hud, p0_scene);
+            }
 
             // Track CE state transitions & print telemetry once per real-world second (regardless of framerate)
             if (g_debug_mode) {

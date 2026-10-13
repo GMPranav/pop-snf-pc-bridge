@@ -26,6 +26,7 @@ void GameConfig::reset_to_defaults() {
     msaa = 8;
     anisotropic = 16;
     gpu_preference = get_system_gpu_topology().recommended_preference;
+    mod_clean_main_menu = true;
 
     // Movement / Navigation (WASD primary, Arrows secondary)
     key_up = SDL_SCANCODE_W;
@@ -200,6 +201,8 @@ bool GameConfig::load(const char *path) {
             else if (strcmp(key, "PadPotion") == 0) pad_potion = parse_pad_value(val);
             else if (strcmp(key, "PadBack") == 0) pad_back = parse_pad_value(val);
             else if (strcmp(key, "PadPause") == 0) pad_pause = parse_pad_value(val);
+        } else if (strcmp(section, "Mods") == 0 || strcmp(section, "Enhancements") == 0) {
+            if (strcmp(key, "CleanMainMenu") == 0) mod_clean_main_menu = (atoi(val) != 0);
         }
     }
 
@@ -276,7 +279,10 @@ bool GameConfig::save(const char *path) const {
     fprintf(f, "PadBlock = %d\n", pad_block);
     fprintf(f, "PadPotion = %d\n", pad_potion);
     fprintf(f, "PadBack = %d\n", pad_back);
-    fprintf(f, "PadPause = %d\n", pad_pause);
+    fprintf(f, "PadPause = %d\n\n", pad_pause);
+
+    fprintf(f, "[Mods]\n");
+    fprintf(f, "CleanMainMenu = %d\n", mod_clean_main_menu ? 1 : 0);
 
     fclose(f);
     printf("[Config] Configuration successfully saved to %s\n", path);

@@ -26,6 +26,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/elf32
     ${CMAKE_SOURCE_DIR}/src/runtime
     ${CMAKE_SOURCE_DIR}/src/bridge
+    ${CMAKE_SOURCE_DIR}/src/mods
     ${CMAKE_SOURCE_DIR}/third_party/dynarmic/include
     ${CMAKE_SOURCE_DIR}/third_party/SDL2/x86_64-w64-mingw32/include
     ${CMAKE_SOURCE_DIR}/third_party/SDL2/x86_64-w64-mingw32/include/SDL2
@@ -47,6 +48,7 @@ set(SOURCES
     src/bridge/bridge_jni.c
     src/config.cpp
     src/gpu_detect.cpp
+    src/mods/soft_mods.cpp
 )
 
 add_executable(PoPSnF_PC ${SOURCES})

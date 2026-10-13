@@ -59,7 +59,7 @@ enum ViewState {
 };
 
 static ViewState s_view = VIEW_MAIN;
-static int s_settings_tab = 0; // Active settings tab index (Graphics, Controls, or Save Data)
+static int s_settings_tab = 0; // Active settings tab index (0=Graphics, 1=Controls, 2=Save Data, 3=Enhancements)
 static bool s_open_reset_confirm = false;
 static uint32_t s_reset_toast_ticks = 0;
 
@@ -652,6 +652,10 @@ int main(int argc, char *argv[]) {
             screenshot_path = argv[++i];
             screenshot_settings = true;
             s_settings_tab = 2;
+        } else if ((strcmp(argv[i], "--enhancements-screenshot") == 0 || strcmp(argv[i], "--mods-screenshot") == 0) && i + 1 < argc) {
+            screenshot_path = argv[++i];
+            screenshot_settings = true;
+            s_settings_tab = 3;
         } else if (strcmp(argv[i], "--screenshot-reset-confirm") == 0 && i + 1 < argc) {
             screenshot_path = argv[++i];
             s_open_reset_confirm = true;
@@ -1397,6 +1401,44 @@ int main(int argc, char *argv[]) {
                         ImGui::Spacing();
                         ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.50f, 1.0f), "[+] Save file deleted. Progress has been reset successfully.");
                     }
+
+                    ImGui::EndChild();
+                    ImGui::EndTabItem();
+                }
+
+                // --- TAB 4: ENHANCEMENTS & SOFT-MODS ---
+                ImGuiTabItemFlags enh_flags = (s_settings_tab == 3) ? ImGuiTabItemFlags_SetSelected : 0;
+                if (ImGui::BeginTabItem("Enhancements", nullptr, enh_flags)) {
+                    s_settings_tab = -1;
+                    ImGui::Spacing();
+                    ImGui::BeginChild("EnhancementsChild", ImVec2(660, 420), true);
+
+                    ImGui::TextColored(ImVec4(0.95f, 0.82f, 0.45f, 1.0f), "PC VISUAL ENHANCEMENTS & SOFT-MODS");
+                    ImGui::Separator();
+                    ImGui::Spacing();
+                    ImGui::TextWrapped("Optional non-destructive enhancements designed to tailor the presentation and UI for modern PC displays while eliminating mobile artifacts.");
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    // Section: Main Menu & UI
+                    ImGui::TextColored(ImVec4(0.40f, 0.80f, 1.0f, 1.0f), "User Interface Enhancements");
+                    ImGui::Spacing();
+
+                    ImGui::Checkbox("Clean Main Menu (Hide mobile promo buttons)", &temp_cfg.mod_clean_main_menu);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Removes mobile freemium buttons (\"Get More Coins\" and \"Get More Games\") from the bottom of the main menu for a clean PC title experience.");
+                    }
+                    ImGui::Spacing();
+                    ImGui::Indent(28.0f);
+                    ImGui::TextDisabled("Removes \"Get More Coins\" and \"Get More Games\" buttons from the main menu.");
+                    ImGui::Unindent(28.0f);
+
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    ImGui::TextColored(ImVec4(0.60f, 0.65f, 0.70f, 1.0f), "More soft-mod enhancements will be introduced in future updates.");
 
                     ImGui::EndChild();
                     ImGui::EndTabItem();
