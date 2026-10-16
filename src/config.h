@@ -39,7 +39,10 @@ struct GameConfig {
     int gpu_preference = -1;    // -1 (Auto-detect from hardware), 0 (System Default), 1 (Integrated/Power Saving), 2 (Discrete/High Performance)
 
     // Soft-Mods / Visual Enhancements
-    bool mod_clean_main_menu = true; // Clean Main Menu: remove "Get More Coins" & "Get More Games" buttons
+    bool mod_clean_main_menu = true;      // Clean Main Menu: remove "Get More Coins" & "Get More Games" buttons
+    bool mod_clean_shop = true;           // Clean Shop: remove "+" button & freemium popups in shop
+    bool mod_clean_level_complete = true; // Clean Level Complete: remove Facebook & social share buttons from level end screen
+    bool mod_clean_touch_hud = true;      // Clean Touch Controls: remove floating on-screen buttons for potion and stealth walk
 
     // Keyboard Primary Controls (SDL_Scancode)
     int key_up = SDL_SCANCODE_W;        // WASD: Movement / Menu Navigation

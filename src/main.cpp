@@ -783,20 +783,20 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--menu") == 0 && i + 1 < argc) {
             const char *mname = argv[++i];
             tap_frame = 70;
-            if (max_frames == 0) max_frames = 250;
-            click2_frame = 140;
+            if (max_frames == 0) max_frames = 300;
+            click2_frame = 200;
             if (strcmp(mname, "world_map") == 0 || strcmp(mname, "worldmap") == 0) {
                 click2_name = "world_map";
                 click2_x = 180.0f; click2_y = 300.0f;
             } else if (strcmp(mname, "extras") == 0) {
                 click2_name = "extras";
-                click2_x = 180.0f; click2_y = 405.0f;
+                click2_x = 300.0f; click2_y = 615.0f;
             } else if (strcmp(mname, "settings") == 0) {
                 click2_name = "settings";
                 click2_x = 50.0f; click2_y = 570.0f;
             } else if (strcmp(mname, "coins") == 0 || strcmp(mname, "store") == 0) {
                 click2_name = "coins";
-                click2_x = 1230.0f; click2_y = 570.0f;
+                click2_x = 1195.0f; click2_y = 540.0f;
             } else if (strcmp(mname, "new_game") == 0 || strcmp(mname, "newgame") == 0) {
                 click2_name = "new_game";
                 click2_x = 180.0f; click2_y = 195.0f;
@@ -837,10 +837,6 @@ int main(int argc, char *argv[]) {
                 click3_frame = 200;
                 click3_x = 600.0f; click3_y = 180.0f;
                 if (max_frames < 360) max_frames = 360;
-            } else if (strcmp(aname, "achievements") == 0) {
-                click3_name = "achievements";
-                click3_frame = 200;
-                click3_x = 150.0f; click3_y = 550.0f;
             } else if (strcmp(aname, "friends") == 0) {
                 click3_name = "friends";
                 click3_frame = 200;
@@ -885,6 +881,16 @@ int main(int argc, char *argv[]) {
                 click3_name = "bundles";
                 click3_frame = 200;
                 click3_x = 422.0f; click3_y = 695.0f;
+            } else if (strcmp(aname, "buy") == 0 || strcmp(aname, "buy_sword") == 0) {
+                click3_name = "buy_sword";
+                click3_frame = 230;
+                click3_x = 1090.0f; click3_y = 641.0f;
+                if (max_frames < 300) max_frames = 300;
+            } else if (strcmp(aname, "achievements") == 0) {
+                click3_name = "achievements";
+                click3_frame = 250;
+                click3_x = 300.0f; click3_y = 265.0f;
+                if (max_frames < 350) max_frames = 350;
             } else {
                 fprintf(stderr, "[-] Unknown action: %s\n", aname);
             }
@@ -937,6 +943,9 @@ int main(int argc, char *argv[]) {
     g_config.load("config.ini");
     soft_mods_config_t sm_cfg = {};
     sm_cfg.clean_main_menu = g_config.mod_clean_main_menu;
+    sm_cfg.clean_shop = g_config.mod_clean_shop;
+    sm_cfg.clean_level_complete = g_config.mod_clean_level_complete;
+    sm_cfg.clean_touch_hud = g_config.mod_clean_touch_hud;
     soft_mods_init(&sm_cfg);
 #ifdef _WIN32
     ensure_compatibility_flags();
@@ -1146,6 +1155,9 @@ int main(int argc, char *argv[]) {
     }
     const uint32_t main_mod_idx = img->module_count - 1;
     const uint32_t mod_base = main_mod_init->base;
+
+    // Apply soft-mods patches (if enabled)
+    soft_mods_apply_patches(img);
 
     // Resolve JNI symbols
     s_sym_JNI_OnLoad                = elf32_lookup_symbol(img, "JNI_OnLoad");
@@ -1791,6 +1803,7 @@ int main(int argc, char *argv[]) {
                 if (s_sym_engineOnMouseButtonDown) {
                     dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
+                send_touch(host, img, mx, my, TOUCH_PHASE_DOWN);
                 if (s_sym_sendEventToCurrentUser) {
                     if (strcmp(click2_name, "world_map") == 0) {
                         send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onWorldMap");
@@ -1798,6 +1811,8 @@ int main(int argc, char *argv[]) {
                         send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onShowExtras");
                     } else if (strcmp(click2_name, "settings") == 0) {
                         send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onSettingsScreen");
+                    } else if (strcmp(click2_name, "coins") == 0 || strcmp(click2_name, "store") == 0) {
+                        send_ai_event(host, img, s_sym_sendEventToCurrentUser, "aiStoreManager", "onShowStore");
                     } else if (strcmp(click2_name, "new_game") == 0) {
                         send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onNewGame");
                     }
@@ -1810,6 +1825,7 @@ int main(int argc, char *argv[]) {
                 if (s_sym_engineOnMouseButtonUp) {
                     dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
+                send_touch(host, img, mx, my, TOUCH_PHASE_UP);
             }
 
             if (click3_frame > 0 && s_frame_cnt == click3_frame) {
@@ -1822,8 +1838,15 @@ int main(int argc, char *argv[]) {
                 if (s_sym_engineOnMouseButtonDown) {
                     dynarmic_call(host, s_sym_engineOnMouseButtonDown, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
-                if (s_sym_sendEventToCurrentUser && strcmp(click3_name, "quit_yes") == 0) {
-                    send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onExitConfirmYes");
+                send_touch(host, img, mx, my, TOUCH_PHASE_DOWN);
+                if (s_sym_sendEventToCurrentUser) {
+                    if (strcmp(click3_name, "quit_yes") == 0) {
+                        send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onExitConfirmYes");
+                    } else if (strcmp(click3_name, "buy_sword") == 0) {
+                        send_ai_event(host, img, s_sym_sendEventToCurrentUser, "aiStoreAndInv", "onOKButtonPress");
+                    } else if (strcmp(click3_name, "achievements") == 0) {
+                        send_ai_event(host, img, s_sym_sendEventToCurrentUser, "MainAI", "onShowAchievements");
+                    }
                 }
             }
             if (click3_frame > 0 && s_frame_cnt == click3_frame + 2) {
@@ -1833,6 +1856,7 @@ int main(int argc, char *argv[]) {
                 if (s_sym_engineOnMouseButtonUp) {
                     dynarmic_call(host, s_sym_engineOnMouseButtonUp, FAKE_ENV_ADDR, 0, float_bits(mx), float_bits(my));
                 }
+                send_touch(host, img, mx, my, TOUCH_PHASE_UP);
             }
 
             if (key_action_frame > 0 && s_frame_cnt == key_action_frame) {
@@ -2010,8 +2034,17 @@ int main(int argc, char *argv[]) {
             // log line the moment they happen.
             bridge_libc_set_scene_context(p0_scene, game_ptr, ce_state, (uint32_t)s_frame_cnt);
 
-            if (p0_hud) {
-                soft_mods_apply_hud(img, p0_hud, p0_scene);
+            if (p_arr) {
+                for (uint32_t pi = 0; pi < game_players && pi < 8; ++pi) {
+                    uint32_t p = *(uint32_t*)(img->mem + p_arr + pi * 4);
+                    if (p) {
+                        uint32_t h = *(uint32_t*)(img->mem + p + 0x28);
+                        uint32_t sc = *(uint32_t*)(img->mem + p + 0x2c);
+                        if (h) {
+                            soft_mods_apply_hud(img, h, sc);
+                        }
+                    }
+                }
             }
 
             // Track CE state transitions & print telemetry once per real-world second (regardless of framerate)

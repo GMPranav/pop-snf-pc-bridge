@@ -1435,6 +1435,39 @@ int main(int argc, char *argv[]) {
                     ImGui::Unindent(28.0f);
 
                     ImGui::Spacing();
+
+                    ImGui::Checkbox("Clean Shop (Remove \"+\" coin button & freemium popups)", &temp_cfg.mod_clean_shop);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Removes the \"+\" button beside the coin counter and suppresses \"Need more coins\" and offerwall promo popups for an unobtrusive store experience.");
+                    }
+                    ImGui::Spacing();
+                    ImGui::Indent(28.0f);
+                    ImGui::TextDisabled("Hides \"+\" coin button, suppresses \"Need more coins\" popup, and blocks ads.");
+                    ImGui::Unindent(28.0f);
+
+                    ImGui::Spacing();
+
+                    ImGui::Checkbox("Clean Social & Level Complete (Remove Facebook & share UI)", &temp_cfg.mod_clean_level_complete);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Removes Facebook social buttons, level end share cards, the Friends menu in Extras, and Achievement share icons for an authentic PC experience.");
+                    }
+                    ImGui::Spacing();
+                    ImGui::Indent(28.0f);
+                    ImGui::TextDisabled("Hides Facebook links, Friends menu, and social share buttons across all menus.");
+                    ImGui::Unindent(28.0f);
+
+                    ImGui::Spacing();
+
+                    ImGui::Checkbox("Clean Touch Controls (Hide Potion & Stealth Walk buttons)", &temp_cfg.mod_clean_touch_hud);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Removes floating on-screen mobile touch buttons for Potion, Stealth Walk, and Combat Block during gameplay for an uncluttered PC display. Keyboard and gamepad controls remain fully functional.");
+                    }
+                    ImGui::Spacing();
+                    ImGui::Indent(28.0f);
+                    ImGui::TextDisabled("Hides on-screen touch buttons for Potion and Stealth Walk during gameplay.");
+                    ImGui::Unindent(28.0f);
+
+                    ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();
 

@@ -1,4 +1,5 @@
 #include "bridge_gles.h"
+#include "soft_mods.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -435,6 +436,8 @@ static uint32_t wrap_glCompressedTexImage2D(elf32_image_t *img, uint32_t r0, uin
             }
         }
     }
+
+    soft_mods_patch_compressed_texture((int)level, (int)w, (int)h, (int)imageSize, (void*)data);
 
     if (pfn_glCompressedTexImage2D) pfn_glCompressedTexImage2D(target, level, internalformat, w, h, border, imageSize, data);
     return 0;

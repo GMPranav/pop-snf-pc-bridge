@@ -27,6 +27,8 @@ void GameConfig::reset_to_defaults() {
     anisotropic = 16;
     gpu_preference = get_system_gpu_topology().recommended_preference;
     mod_clean_main_menu = true;
+    mod_clean_shop = true;
+    mod_clean_level_complete = true;
 
     // Movement / Navigation (WASD primary, Arrows secondary)
     key_up = SDL_SCANCODE_W;
@@ -203,6 +205,9 @@ bool GameConfig::load(const char *path) {
             else if (strcmp(key, "PadPause") == 0) pad_pause = parse_pad_value(val);
         } else if (strcmp(section, "Mods") == 0 || strcmp(section, "Enhancements") == 0) {
             if (strcmp(key, "CleanMainMenu") == 0) mod_clean_main_menu = (atoi(val) != 0);
+            else if (strcmp(key, "CleanShop") == 0) mod_clean_shop = (atoi(val) != 0);
+            else if (strcmp(key, "CleanLevelComplete") == 0 || strcmp(key, "CleanLevelEnd") == 0) mod_clean_level_complete = (atoi(val) != 0);
+            else if (strcmp(key, "CleanTouchControls") == 0 || strcmp(key, "CleanTouchHUD") == 0 || strcmp(key, "HideTouchButtons") == 0 || strcmp(key, "HideTouchControls") == 0) mod_clean_touch_hud = (atoi(val) != 0);
         }
     }
 
@@ -283,6 +288,9 @@ bool GameConfig::save(const char *path) const {
 
     fprintf(f, "[Mods]\n");
     fprintf(f, "CleanMainMenu = %d\n", mod_clean_main_menu ? 1 : 0);
+    fprintf(f, "CleanShop = %d\n", mod_clean_shop ? 1 : 0);
+    fprintf(f, "CleanLevelComplete = %d\n", mod_clean_level_complete ? 1 : 0);
+    fprintf(f, "CleanTouchControls = %d\n", mod_clean_touch_hud ? 1 : 0);
 
     fclose(f);
     printf("[Config] Configuration successfully saved to %s\n", path);
